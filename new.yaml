@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 instance with Logstash installation
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair
+    Type: AWS::EC2::KeyPair::KeyName
+
+Resources:
+  LogstashEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c55b159cbfafe1f0  # Amazon Linux 2 AMI (change based on region)
+      SecurityGroups:
+        - !Ref InstanceSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch
+          cat <<EOF > /etc/yum.repos.d/logstash.repo
+          [logstash-8.x]
+          name=Elastic repository for 8.x packages
+          baseurl=https://artifacts.elastic.co/packages/8.x/yum
+          gpgcheck=1
+          gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+          enabled=1
+          autorefresh=1
+          type=rpm-md
+          EOF
+          yum install -y logstash
+          systemctl enable logstash
+          systemctl start logstash
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access and allow logstash ports
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5044
+          ToPort: 5044
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  InstanceId:
+    Description: Instance ID
+    Value: !Ref LogstashEC2Instance
+  PublicIP:
+    Description: Public IP of the instance
+    Value: !GetAtt LogstashEC2Instance.PublicIp
+
